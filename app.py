@@ -85,7 +85,7 @@ def index():
     state = read_state()
     if state is not None:
         encoded = json.dumps(state, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
-        html = html.replace("</head>", f"<script>window.__INITIAL_STATE__={encoded}</script></head>")
+        html = html.replace("</head>", f"<script>window.__INITIAL_STATE__={encoded}</script></head>", 1)
     return html, 200, {"Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store"}
 
 
