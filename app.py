@@ -70,7 +70,7 @@ def login():
             session["authenticated"] = True
             return redirect("/")
         error = '<p class="error">Mot de passe incorrect.</p>'
-    return LOGIN_PAGE.format(error=error), 200, {"Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store"}
+    return LOGIN_PAGE.replace("{error}", error), 200, {"Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store"}
 
 
 @app.post("/logout")
