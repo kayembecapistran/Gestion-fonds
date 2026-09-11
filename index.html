@@ -167,7 +167,7 @@
 <body>
 <div class="wrap">
   <h1>Gestion de Fonds</h1>
-  <div class="sub">Gérez les entrées, les sorties, la commission de 3 % et les sorties effectuées sur cette commission.</div>
+  <div class="sub">Gérez les entrées, les sorties, les taux de commission personnalisés et les sorties effectuées sur les commissions.</div>
 
   <div class="scopebar">
     <strong>Compte affiché :</strong>
@@ -196,8 +196,9 @@
       </select>
       <label class="toggle">
         <input type="checkbox" id="accountFee" checked>
-        Retenue 3 %
+        Commission active
       </label>
+      <input id="accountRate" type="number" min="0" max="100" step="0.01" value="3" placeholder="Taux %" style="width:110px">
       <button class="primary" onclick="addAccount()">Ajouter</button>
     </div>
   </div>
@@ -218,7 +219,7 @@
         <input id="entryNote" placeholder="Motif / référence" style="flex:2;min-width:220px">
         <button class="primary" onclick="addEntry()">Enregistrer</button>
       </div>
-      <div class="footer-note">La retenue de 3 % est appliquée automatiquement uniquement aux comptes concernés. Vous pouvez choisir la date réelle de l’opération.</div>
+      <div class="footer-note">Le taux configuré sur le compte est appliqué aux nouvelles entrées. Les anciennes opérations conservent leur commission d’origine.</div>
     </div>
 
     <div id="outputForm" style="display:none">
@@ -253,7 +254,8 @@
         <div class="footer-note">Affichez un rapport complet, puis imprimez-le ou enregistrez-le en PDF.</div>
       </div>
       <div class="row">
-        <button class="ghost" onclick="showReport()">Afficher le rapport</button>
+        <button class="ghost" onclick="showReport('full')">Rapport complet</button>
+        <button class="ghost" onclick="showCommissionReport()">Rapport des commissions</button>
         <button class="ghost" onclick="exportReportHTML()">Exporter le rapport</button>
         <button class="ghost" onclick="exportReportCSV()">Exporter CSV</button>
         <button class="primary" onclick="printReport()">Imprimer / PDF</button>
@@ -286,6 +288,7 @@
 <script>
 let state = window.__INITIAL_STATE__ || JSON.parse(localStorage.getItem('gestionFondsV5') || 'null');
 let activeAccountId = localStorage.getItem('gestionFondsActiveAccount') || '';
+let reportMode = 'full';
 if(!state){
   state = {accounts: [], transactions: []};
   localStorage.setItem('gestionFondsV5', JSON.stringify(state));
@@ -334,10 +337,12 @@ function addAccount(){
   const name = document.getElementById('accountName').value.trim();
   const currency = document.getElementById('accountCurrency').value;
   const fee = document.getElementById('accountFee').checked;
+  const commissionRate = Number(document.getElementById('accountRate').value);
   if(!name){ alert('Entre le nom du compte.'); return; }
+  if(fee && (!(commissionRate>=0) || commissionRate>100)){ alert('Entre un taux de commission valide entre 0 et 100 %.'); return; }
   state.accounts.push({
     id:crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
-    name, currency, fee
+    name, currency, fee:fee && commissionRate>0, commissionRate:fee ? commissionRate : 0
   });
   document.getElementById('accountName').value='';
   save();
@@ -351,7 +356,7 @@ function addEntry(){
   if(!account){ alert('Ajoute d’abord un compte.'); return; }
   if(!(amount>0)){ alert('Entre un montant valide.'); return; }
 
-  const held = account.fee ? amount*0.03 : 0;
+  const held = Number((amount*getCommissionRate(account)/100).toFixed(2));
   const impact = amount-held;
 
   state.transactions.unshift({
@@ -442,9 +447,19 @@ function getAccountBalance(accountId){
     .reduce((sum,t)=>sum+t.impact,0);
 }
 
+function getCommissionRate(account){
+  if(!account || !account.fee) return 0;
+  const rate=Number(account.commissionRate);
+  return Number.isFinite(rate) ? rate : 3;
+}
+
 function toggleFee(id){
   const a = state.accounts.find(x=>x.id===id);
-  if(a){ a.fee=!a.fee; save(); }
+  if(a){
+    a.fee=!a.fee;
+    if(a.fee && !(Number(a.commissionRate)>0)) a.commissionRate=3;
+    save();
+  }
 }
 
 function editAccount(id){
@@ -460,8 +475,14 @@ function editAccount(id){
   if(!['USD','CDF','EUR','ZAR'].includes(cleanCurrency)){
     alert('Devise invalide. Utilisez USD, CDF, EUR ou ZAR.'); return;
   }
+  const rateValue = prompt('Taux de commission en % (0 pour désactiver) :', getCommissionRate(a));
+  if(rateValue===null) return;
+  const rate = Number(String(rateValue).replace(',','.'));
+  if(!(rate>=0) || rate>100){ alert('Le taux doit être compris entre 0 et 100 %.'); return; }
   a.name=cleanName;
   a.currency=cleanCurrency;
+  a.commissionRate=rate;
+  a.fee=rate>0;
   save();
 }
 
@@ -524,7 +545,7 @@ function setMode(mode){
 function render(){
   if(activeAccountId && !state.accounts.some(a=>a.id===activeAccountId)) activeAccountId='';
   const options = state.accounts.length
-    ? state.accounts.map(a=>`<option value="${a.id}" ${activeAccountId===a.id?'selected':''}>${escapeHtml(a.name)} — ${a.fee?'3 %':'sans retenue'}</option>`).join('')
+    ? state.accounts.map(a=>`<option value="${a.id}" ${activeAccountId===a.id?'selected':''}>${escapeHtml(a.name)} — ${getCommissionRate(a)>0 ? getCommissionRate(a)+' %' : 'sans commission'}</option>`).join('')
     : '<option value="">Aucun compte</option>';
 
   document.getElementById('entryAccount').innerHTML = options;
@@ -551,7 +572,7 @@ function render(){
             <div class="account-name">${escapeHtml(a.name)}</div>
             <div style="color:var(--muted);font-size:13px;margin-top:3px">${a.currency}</div>
           </div>
-          <span class="badge ${a.fee?'':'off'}">${a.fee?'Retenue 3 %':'Sans retenue'}</span>
+          <span class="badge ${getCommissionRate(a)>0?'':'off'}">${getCommissionRate(a)>0 ? 'Commission '+getCommissionRate(a)+' %' : 'Sans commission'}</span>
         </div>
 
         <div class="account-values">
@@ -566,7 +587,7 @@ function render(){
         <div class="row" style="margin-top:12px">
           <button class="primary" onclick="manageAccount('${a.id}')">Gérer ce compte</button>
           <button class="ghost" onclick="editAccount('${a.id}')">Modifier</button>
-          <button class="ghost" onclick="toggleFee('${a.id}')">${a.fee?'Désactiver 3 %':'Activer 3 %'}</button>
+          <button class="ghost" onclick="toggleFee('${a.id}')">${a.fee?'Désactiver commission':'Activer commission'}</button>
           <button class="danger" onclick="deleteAccount('${a.id}')">Supprimer</button>
         </div>
       </div>`;
@@ -630,7 +651,12 @@ function reportDate(d){
   });
 }
 
-function showReport(){
+function showCommissionReport(){
+  showReport('commission');
+}
+
+function showReport(mode='full'){
+  reportMode=mode;
   const area = document.getElementById('reportArea');
   area.style.display = 'block';
 
@@ -639,8 +665,8 @@ function showReport(){
   let html = `<div class="report">
     <div class="report-header">
       <div>
-        <div class="report-title">Rapport de gestion de fonds</div>
-        <div style="margin-top:5px">Situation des comptes et historique des opérations</div>
+        <div class="report-title">${mode==='commission' ? 'Rapport des commissions' : 'Rapport de gestion de fonds'}</div>
+        <div style="margin-top:5px">${mode==='commission' ? 'Commissions générées, utilisées et disponibles' : 'Situation des comptes et historique des opérations'}</div>
       </div>
       <div class="report-meta">Généré le ${generated}</div>
     </div>`;
@@ -658,6 +684,34 @@ function showReport(){
     const principal = ts.reduce((s,t)=>s+(t.impact||0),0);
     const commissionBalance = commission-commissionOutputs;
     const totalHeld = principal+commissionBalance;
+
+    if(mode==='commission'){
+      const commissionTs=ts.filter(t=>(t.type==='entry' && (t.held||0)>0) || t.type==='commission_output');
+      html += `
+        <h3>${escapeHtml(a.name)} — ${a.currency} — Taux actuel ${getCommissionRate(a)} %</h3>
+        <div class="report-summary">
+          <div class="report-box"><div class="k">Commission générée</div><div class="v">${money(commission,a.currency)}</div></div>
+          <div class="report-box"><div class="k">Sorties commission</div><div class="v">${money(commissionOutputs,a.currency)}</div></div>
+          <div class="report-box"><div class="k">Commission disponible</div><div class="v">${money(commissionBalance,a.currency)}</div></div>
+        </div>
+        <table><thead><tr><th>Date</th><th>Type</th><th>Montant de référence</th><th>Impact commission</th><th>Motif / Référence</th></tr></thead><tbody>`;
+      if(!commissionTs.length){
+        html += `<tr><td colspan="5">Aucune opération de commission.</td></tr>`;
+      }else{
+        commissionTs.forEach(t=>{
+          const generated=t.type==='entry';
+          html += `<tr>
+            <td>${reportDate(t.date)}</td>
+            <td>${generated?'Commission générée':'Sortie commission'}</td>
+            <td>${money(t.amount,a.currency)}</td>
+            <td>${generated?'+':'-'}${money(generated?t.held:t.amount,a.currency)}</td>
+            <td>${escapeHtml(t.note||'—')}</td>
+          </tr>`;
+        });
+      }
+      html += `</tbody></table>`;
+      return;
+    }
 
     html += `
       <h3>${escapeHtml(a.name)} — ${a.currency}</h3>
@@ -712,7 +766,7 @@ function showReport(){
 }
 
 function buildReportStandalone(){
-  showReport();
+  showReport(reportMode);
   const report = document.getElementById('reportArea').innerHTML;
   return `<!DOCTYPE html>
 <html lang="fr">
@@ -749,16 +803,30 @@ function downloadBlob(content, filename, mime){
 function exportReportHTML(){
   const content = buildReportStandalone();
   const stamp = new Date().toISOString().slice(0,10);
-  downloadBlob(content, `rapport_gestion_fonds_${stamp}.html`, 'text/html;charset=utf-8');
+  const prefix=reportMode==='commission' ? 'rapport_commissions' : 'rapport_gestion_fonds';
+  downloadBlob(content, `${prefix}_${stamp}.html`, 'text/html;charset=utf-8');
 }
 
 function exportReportCSV(){
-  const rows = [['Date','Compte','Type','Montant','Devise','Commission générée','Impact principal','Motif / Référence']];
+  const commissionOnly=reportMode==='commission';
+  const rows = [commissionOnly
+    ? ['Date','Compte','Type','Montant de référence','Devise','Impact commission','Motif / Référence']
+    : ['Date','Compte','Type','Montant','Devise','Commission générée','Impact principal','Motif / Référence']];
   scopedAccounts().forEach(a=>{
     state.transactions
-      .filter(t=>t.accountId===a.id)
+      .filter(t=>t.accountId===a.id && (!commissionOnly || (t.type==='entry' && (t.held||0)>0) || t.type==='commission_output'))
       .slice().sort((x,y)=>new Date(x.date)-new Date(y.date))
       .forEach(t=>{
+        if(commissionOnly){
+          const generated=t.type==='entry';
+          rows.push([
+            new Date(t.date).toLocaleDateString('fr-FR'), a.name,
+            generated?'Commission générée':'Sortie commission',
+            String(t.amount).replace('.',','), a.currency,
+            String(generated?t.held:-t.amount).replace('.',','), t.note||''
+          ]);
+          return;
+        }
         const typeLabel = t.type==='entry' ? 'Entrée' : (t.type==='commission_output' ? 'Sortie commission' : 'Sortie');
         rows.push([
           new Date(t.date).toLocaleDateString('fr-FR'),
@@ -774,7 +842,7 @@ function exportReportCSV(){
   });
   const csv = '\ufeff' + rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(';')).join('\r\n');
   const stamp = new Date().toISOString().slice(0,10);
-  downloadBlob(csv, `operations_gestion_fonds_${stamp}.csv`, 'text/csv;charset=utf-8');
+  downloadBlob(csv, `${commissionOnly?'commissions':'operations_gestion_fonds'}_${stamp}.csv`, 'text/csv;charset=utf-8');
 }
 
 function printReport(){
