@@ -58,6 +58,9 @@
   .primary:hover{background:var(--primary2)}
   .ghost{background:#eef3f0;color:#233b2f}
   .danger{background:#fff0ee;color:var(--danger)}
+  .scopebar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:18px 0;padding:14px;background:#e9f5ee;border:1px solid #cfe5d8;border-radius:14px}
+  .scopebar strong{color:var(--primary2)}
+  .account.active{border:2px solid var(--primary);box-shadow:0 0 0 3px #dff3e7}
   .accounts{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
   .account{
     border:1px solid var(--border);
@@ -165,6 +168,12 @@
 <div class="wrap">
   <h1>Gestion de Fonds</h1>
   <div class="sub">Gérez les entrées, les sorties, la commission de 3 % et les sorties effectuées sur cette commission.</div>
+
+  <div class="scopebar">
+    <strong>Compte affiché :</strong>
+    <select id="scopeAccount" onchange="setActiveAccount(this.value)" style="min-width:240px"></select>
+    <button class="ghost" onclick="setActiveAccount('')">Afficher tous les comptes</button>
+  </div>
 
   <div class="grid">
     <div class="stat"><div class="label">Total des entrées</div><div class="value" id="totalEntries">0</div></div>
@@ -276,6 +285,7 @@
 
 <script>
 let state = window.__INITIAL_STATE__ || JSON.parse(localStorage.getItem('gestionFondsV5') || 'null');
+let activeAccountId = localStorage.getItem('gestionFondsActiveAccount') || '';
 if(!state){
   state = {accounts: [], transactions: []};
   localStorage.setItem('gestionFondsV5', JSON.stringify(state));
@@ -437,6 +447,48 @@ function toggleFee(id){
   if(a){ a.fee=!a.fee; save(); }
 }
 
+function editAccount(id){
+  const a = state.accounts.find(x=>x.id===id);
+  if(!a) return;
+  const name = prompt('Nom du compte :', a.name);
+  if(name===null) return;
+  const cleanName = name.trim();
+  if(!cleanName){ alert('Le nom du compte ne peut pas être vide.'); return; }
+  const currency = prompt('Devise (USD, CDF, EUR ou ZAR) :', a.currency);
+  if(currency===null) return;
+  const cleanCurrency = currency.trim().toUpperCase();
+  if(!['USD','CDF','EUR','ZAR'].includes(cleanCurrency)){
+    alert('Devise invalide. Utilisez USD, CDF, EUR ou ZAR.'); return;
+  }
+  a.name=cleanName;
+  a.currency=cleanCurrency;
+  save();
+}
+
+function setActiveAccount(id){
+  activeAccountId = state.accounts.some(a=>a.id===id) ? id : '';
+  localStorage.setItem('gestionFondsActiveAccount', activeAccountId);
+  render();
+  if(activeAccountId){
+    ['entryAccount','outputAccount','commissionAccount'].forEach(selectId=>{
+      document.getElementById(selectId).value=activeAccountId;
+    });
+  }
+}
+
+function manageAccount(id){
+  setActiveAccount(id);
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function scopedAccounts(){
+  return activeAccountId ? state.accounts.filter(a=>a.id===activeAccountId) : state.accounts;
+}
+
+function scopedTransactions(){
+  return activeAccountId ? state.transactions.filter(t=>t.accountId===activeAccountId) : state.transactions;
+}
+
 function deleteAccount(id){
   if(state.transactions.some(t=>t.accountId===id)){
     alert("Ce compte contient déjà des opérations. Il ne peut pas être supprimé.");
@@ -449,6 +501,8 @@ function deleteAccount(id){
 function resetAll(){
   if(confirm('Voulez-vous vraiment effacer tous les comptes et toutes les opérations ?')){
     state={accounts:[],transactions:[]};
+    activeAccountId='';
+    localStorage.removeItem('gestionFondsActiveAccount');
     save();
   }
 }
@@ -468,13 +522,15 @@ function setMode(mode){
 }
 
 function render(){
+  if(activeAccountId && !state.accounts.some(a=>a.id===activeAccountId)) activeAccountId='';
   const options = state.accounts.length
-    ? state.accounts.map(a=>`<option value="${a.id}">${escapeHtml(a.name)} — ${a.fee?'3 %':'sans retenue'}</option>`).join('')
+    ? state.accounts.map(a=>`<option value="${a.id}" ${activeAccountId===a.id?'selected':''}>${escapeHtml(a.name)} — ${a.fee?'3 %':'sans retenue'}</option>`).join('')
     : '<option value="">Aucun compte</option>';
 
   document.getElementById('entryAccount').innerHTML = options;
   document.getElementById('outputAccount').innerHTML = options;
   document.getElementById('commissionAccount').innerHTML = options;
+  document.getElementById('scopeAccount').innerHTML = '<option value="">Tous les comptes</option>' + state.accounts.map(a=>`<option value="${a.id}" ${activeAccountId===a.id?'selected':''}>${escapeHtml(a.name)}</option>`).join('');
 
   const ac=document.getElementById('accounts');
   if(!state.accounts.length){
@@ -489,7 +545,7 @@ function render(){
       const commissionOutputs=ts.filter(t=>t.type==='commission_output').reduce((s,t)=>s+t.amount,0);
       const commissionBalance=held-commissionOutputs;
 
-      return `<div class="account">
+      return `<div class="account ${activeAccountId===a.id?'active':''}">
         <div class="account-top">
           <div>
             <div class="account-name">${escapeHtml(a.name)}</div>
@@ -508,6 +564,8 @@ function render(){
         </div>
 
         <div class="row" style="margin-top:12px">
+          <button class="primary" onclick="manageAccount('${a.id}')">Gérer ce compte</button>
+          <button class="ghost" onclick="editAccount('${a.id}')">Modifier</button>
           <button class="ghost" onclick="toggleFee('${a.id}')">${a.fee?'Désactiver 3 %':'Activer 3 %'}</button>
           <button class="danger" onclick="deleteAccount('${a.id}')">Supprimer</button>
         </div>
@@ -516,10 +574,11 @@ function render(){
   }
 
   const tbody=document.getElementById('history');
-  if(!state.transactions.length){
+  const visibleTransactions=scopedTransactions();
+  if(!visibleTransactions.length){
     tbody.innerHTML='<tr><td colspan="7" class="empty">Aucune opération enregistrée.</td></tr>';
   }else{
-    tbody.innerHTML=state.transactions.map(t=>{
+    tbody.innerHTML=visibleTransactions.map(t=>{
       const a=state.accounts.find(x=>x.id===t.accountId);
       if(!a) return '';
       const d=new Date(t.date).toLocaleString('fr-FR');
@@ -539,11 +598,11 @@ function render(){
     }).join('');
   }
 
-  const totalE=state.transactions.filter(t=>t.type==='entry').reduce((s,t)=>s+t.amount,0);
-  const totalH=state.transactions.filter(t=>t.type==='entry').reduce((s,t)=>s+(t.held||0),0);
-  const totalO=state.transactions.filter(t=>t.type==='output').reduce((s,t)=>s+t.amount,0);
-  const totalB=state.transactions.reduce((s,t)=>s+(t.impact||0),0);
-  const totalCO=state.transactions.filter(t=>t.type==='commission_output').reduce((s,t)=>s+t.amount,0);
+  const totalE=visibleTransactions.filter(t=>t.type==='entry').reduce((s,t)=>s+t.amount,0);
+  const totalH=visibleTransactions.filter(t=>t.type==='entry').reduce((s,t)=>s+(t.held||0),0);
+  const totalO=visibleTransactions.filter(t=>t.type==='output').reduce((s,t)=>s+t.amount,0);
+  const totalB=visibleTransactions.reduce((s,t)=>s+(t.impact||0),0);
+  const totalCO=visibleTransactions.filter(t=>t.type==='commission_output').reduce((s,t)=>s+t.amount,0);
   const totalCB=totalH-totalCO;
 
   document.getElementById('totalEntries').textContent=formatCompact(totalE);
@@ -586,7 +645,7 @@ function showReport(){
       <div class="report-meta">Généré le ${generated}</div>
     </div>`;
 
-  state.accounts.forEach(a=>{
+  scopedAccounts().forEach(a=>{
     const ts = state.transactions
       .filter(t=>t.accountId===a.id)
       .slice()
@@ -695,7 +754,7 @@ function exportReportHTML(){
 
 function exportReportCSV(){
   const rows = [['Date','Compte','Type','Montant','Devise','Commission générée','Impact principal','Motif / Référence']];
-  state.accounts.forEach(a=>{
+  scopedAccounts().forEach(a=>{
     state.transactions
       .filter(t=>t.accountId===a.id)
       .slice().sort((x,y)=>new Date(x.date)-new Date(y.date))
