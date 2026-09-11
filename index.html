@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Gestion de Fonds</title>
+<style>
+  :root{
+    --bg:#f4f7f5;
+    --card:#ffffff;
+    --text:#10231a;
+    --muted:#66756e;
+    --primary:#18794e;
+    --primary2:#0f5f3b;
+    --danger:#b42318;
+    --border:#dce6e0;
+    --soft:#e9f5ee;
+    --warning:#9a6700;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+  }
+  .wrap{max-width:1120px;margin:auto;padding:22px}
+  h1{margin:0 0 6px;font-size:30px}
+  .sub{color:var(--muted);margin-bottom:20px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}
+  .stat,.card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:16px;
+    box-shadow:0 3px 12px rgba(0,0,0,.035);
+  }
+  .stat{padding:18px}
+  .stat .label{font-size:13px;color:var(--muted);margin-bottom:7px}
+  .stat .value{font-size:24px;font-weight:800}
+  .card{padding:18px;margin-bottom:18px}
+  .card h2{font-size:18px;margin:0 0 14px}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  input,select,button{font:inherit;border-radius:10px}
+  input,select{
+    border:1px solid var(--border);
+    background:#fff;
+    padding:11px 12px;
+    min-height:44px;
+  }
+  input:focus,select:focus{outline:2px solid #a9d9be;border-color:var(--primary)}
+  button{
+    border:0;
+    cursor:pointer;
+    padding:11px 14px;
+    font-weight:700;
+  }
+  .primary{background:var(--primary);color:white}
+  .primary:hover{background:var(--primary2)}
+  .ghost{background:#eef3f0;color:#233b2f}
+  .danger{background:#fff0ee;color:var(--danger)}
+  .accounts{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+  .account{
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:14px;
+    background:#fff;
+  }
+  .account-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+  .account-name{font-weight:800;font-size:17px}
+  .badge{
+    font-size:12px;font-weight:700;padding:5px 8px;border-radius:999px;
+    background:var(--soft);color:var(--primary2);white-space:nowrap
+  }
+  .badge.off{background:#f1f2f1;color:#68736d}
+  .account-values{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:13px}
+  .mini{background:#f8faf9;border-radius:10px;padding:10px}
+  .mini .k{font-size:11px;color:var(--muted)}
+  .mini .v{font-weight:800;margin-top:3px}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:11px 8px;text-align:left;border-bottom:1px solid #edf1ef;font-size:14px}
+  th{color:var(--muted);font-size:12px}
+  .pos{color:var(--primary2);font-weight:700}
+  .neg{color:var(--danger);font-weight:700}
+  .ret{color:var(--warning);font-weight:700}
+  .empty{color:var(--muted);text-align:center;padding:18px}
+  .toggle{display:flex;align-items:center;gap:8px}
+  .footer-note{font-size:12px;color:var(--muted);margin-top:8px}
+  .tabs{display:flex;gap:8px;margin-bottom:14px}
+  .tabs button.active{background:var(--primary);color:white}
+  @media(max-width:760px){
+    .grid{grid-template-columns:1fr 1fr}
+    .accounts{grid-template-columns:1fr}
+    h1{font-size:25px}
+    .wrap{padding:14px}
+    table{display:block;overflow:auto;white-space:nowrap}
+  }
+  @media(max-width:480px){
+    .grid{grid-template-columns:1fr}
+  }
+
+  .report{
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:20px;
+    background:#fff;
+  }
+  .report-header{
+    display:flex;
+    justify-content:space-between;
+    gap:20px;
+    align-items:flex-start;
+    border-bottom:2px solid #e7ece9;
+    padding-bottom:14px;
+    margin-bottom:16px;
+  }
+  .report-title{font-size:24px;font-weight:800}
+  .report-meta{font-size:13px;color:var(--muted);text-align:right}
+  .report-summary{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:10px;
+    margin:16px 0;
+  }
+  .report-box{
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:12px;
+  }
+  .report-box .k{font-size:11px;color:var(--muted)}
+  .report-box .v{font-size:17px;font-weight:800;margin-top:4px}
+  .report h3{margin:18px 0 8px}
+  .report table{font-size:12px}
+  .signature-row{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:40px;
+    margin-top:45px;
+  }
+  .signature{
+    border-top:1px solid #333;
+    padding-top:6px;
+    text-align:center;
+    font-size:12px;
+  }
+  @media print{
+    body{background:#fff}
+    body *{visibility:hidden}
+    #reportArea, #reportArea *{visibility:visible}
+    #reportArea{
+      display:block !important;
+      position:absolute;
+      left:0; top:0;
+      width:100%;
+      margin:0;
+      padding:0;
+    }
+    .report{border:0;box-shadow:none;padding:10mm}
+    .report table{display:table !important;overflow:visible !important;white-space:normal !important}
+    .report th,.report td{font-size:10pt}
+    @page{size:A4;margin:10mm}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Gestion de Fonds</h1>
+  <div class="sub">Gérez les entrées, les sorties, la commission de 3 % et les sorties effectuées sur cette commission.</div>
+
+  <div class="grid">
+    <div class="stat"><div class="label">Total des entrées</div><div class="value" id="totalEntries">0</div></div>
+    <div class="stat"><div class="label">Commission générée</div><div class="value" id="totalHeld">0</div></div>
+    <div class="stat"><div class="label">Sorties principales</div><div class="value" id="totalOutputs">0</div></div>
+    <div class="stat"><div class="label">Solde principal</div><div class="value" id="totalBalance">0</div></div>
+    <div class="stat"><div class="label">Sorties commission</div><div class="value" id="totalCommissionOutputs">0</div></div>
+    <div class="stat"><div class="label">Commission disponible</div><div class="value" id="totalCommissionBalance">0</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Ajouter un compte</h2>
+    <div class="row">
+      <input id="accountName" placeholder="Nom du compte, ex. Compte A" style="flex:2;min-width:220px">
+      <select id="accountCurrency" style="flex:1;min-width:150px">
+        <option value="CDF">CDF</option>
+        <option value="USD">USD</option>
+        <option value="EUR">EUR</option>
+        <option value="ZAR">ZAR</option>
+      </select>
+      <label class="toggle">
+        <input type="checkbox" id="accountFee" checked>
+        Retenue 3 %
+      </label>
+      <button class="primary" onclick="addAccount()">Ajouter</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="tabs">
+      <button id="tabEntry" class="active" onclick="setMode('entry')">Entrée</button>
+      <button id="tabOutput" class="ghost" onclick="setMode('output')">Sortie</button>
+      <button id="tabCommission" class="ghost" onclick="setMode('commission')">Sortie commission</button>
+    </div>
+
+    <div id="entryForm">
+      <h2>Enregistrer une entrée</h2>
+      <div class="row">
+        <select id="entryAccount" style="flex:2;min-width:220px"></select>
+        <input id="entryAmount" type="number" min="0" step="0.01" placeholder="Montant" style="flex:1;min-width:150px">
+        <input id="entryDate" type="date" style="flex:1;min-width:160px">
+        <input id="entryNote" placeholder="Motif / référence" style="flex:2;min-width:220px">
+        <button class="primary" onclick="addEntry()">Enregistrer</button>
+      </div>
+      <div class="footer-note">La retenue de 3 % est appliquée automatiquement uniquement aux comptes concernés. Vous pouvez choisir la date réelle de l’opération.</div>
+    </div>
+
+    <div id="outputForm" style="display:none">
+      <h2>Enregistrer une sortie</h2>
+      <div class="row">
+        <select id="outputAccount" style="flex:2;min-width:220px"></select>
+        <input id="outputAmount" type="number" min="0" step="0.01" placeholder="Montant de la sortie" style="flex:1;min-width:150px">
+        <input id="outputDate" type="date" style="flex:1;min-width:160px">
+        <input id="outputNote" placeholder="Motif / bénéficiaire" style="flex:2;min-width:220px">
+        <button class="primary" onclick="addOutput()">Enregistrer</button>
+      </div>
+      <div class="footer-note">Une sortie diminue directement le solde disponible du compte. Vous pouvez saisir une date passée ou future.</div>
+    </div>
+
+    <div id="commissionForm" style="display:none">
+      <h2>Enregistrer une sortie sur la commission</h2>
+      <div class="row">
+        <select id="commissionAccount" style="flex:2;min-width:220px"></select>
+        <input id="commissionAmount" type="number" min="0" step="0.01" placeholder="Montant retiré de la commission" style="flex:1;min-width:170px">
+        <input id="commissionDate" type="date" style="flex:1;min-width:160px">
+        <input id="commissionNote" placeholder="Motif / utilisation de la commission" style="flex:2;min-width:220px">
+        <button class="primary" onclick="addCommissionOutput()">Enregistrer</button>
+      </div>
+      <div class="footer-note">Cette opération diminue uniquement la commission disponible et ne touche pas au solde principal du compte. La date peut être saisie manuellement.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between;align-items:center">
+      <div>
+        <h2 style="margin:0 0 4px">Rapport</h2>
+        <div class="footer-note">Affichez un rapport complet, puis imprimez-le ou enregistrez-le en PDF.</div>
+      </div>
+      <div class="row">
+        <button class="ghost" onclick="showReport()">Afficher le rapport</button>
+        <button class="ghost" onclick="exportReportHTML()">Exporter le rapport</button>
+        <button class="ghost" onclick="exportReportCSV()">Exporter CSV</button>
+        <button class="primary" onclick="printReport()">Imprimer / PDF</button>
+      </div>
+    </div>
+    <div id="reportArea" style="display:none;margin-top:16px"></div>
+  </div>
+
+  <div class="card">
+    <h2>Mes comptes</h2>
+    <div id="accounts" class="accounts"></div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between;align-items:center">
+      <h2 style="margin:0">Historique des opérations</h2>
+      <button class="danger" onclick="resetAll()">Effacer toutes les données</button>
+    </div>
+    <div style="overflow:auto;margin-top:10px">
+      <table>
+        <thead>
+          <tr><th>Date</th><th>Type</th><th>Compte</th><th>Montant</th><th>Commission générée</th><th>Impact solde principal</th><th>Motif</th></tr>
+        </thead>
+        <tbody id="history"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+let state = window.__INITIAL_STATE__ || JSON.parse(localStorage.getItem('gestionFondsV5') || 'null');
+if(!state){
+  state = {accounts: [], transactions: []};
+  localStorage.setItem('gestionFondsV5', JSON.stringify(state));
+}
+
+function save(){
+  localStorage.setItem('gestionFondsV5', JSON.stringify(state));
+  fetch('/api/state', {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(state)
+  }).catch(() => {});
+  render();
+}
+
+function money(n,currency){
+  try{
+    return new Intl.NumberFormat('fr-FR',{style:'currency',currency,maximumFractionDigits:2}).format(n);
+  }catch(e){
+    return Number(n).toFixed(2)+' '+currency;
+  }
+}
+
+
+function operationDate(inputId){
+  const val = document.getElementById(inputId).value;
+  if(val){
+    return val + 'T12:00:00';
+  }
+  return new Date().toISOString();
+}
+
+function setDefaultDates(){
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth()+1).padStart(2,'0');
+  const dd = String(today.getDate()).padStart(2,'0');
+  const v = `${yyyy}-${mm}-${dd}`;
+  ['entryDate','outputDate','commissionDate'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el && !el.value) el.value=v;
+  });
+}
+
+function addAccount(){
+  const name = document.getElementById('accountName').value.trim();
+  const currency = document.getElementById('accountCurrency').value;
+  const fee = document.getElementById('accountFee').checked;
+  if(!name){ alert('Entre le nom du compte.'); return; }
+  state.accounts.push({
+    id:crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
+    name, currency, fee
+  });
+  document.getElementById('accountName').value='';
+  save();
+}
+
+function addEntry(){
+  const accountId = document.getElementById('entryAccount').value;
+  const amount = Number(document.getElementById('entryAmount').value);
+  const note = document.getElementById('entryNote').value.trim();
+  const account = state.accounts.find(a=>a.id===accountId);
+  if(!account){ alert('Ajoute d’abord un compte.'); return; }
+  if(!(amount>0)){ alert('Entre un montant valide.'); return; }
+
+  const held = account.fee ? amount*0.03 : 0;
+  const impact = amount-held;
+
+  state.transactions.unshift({
+    id: crypto.randomUUID ? crypto.randomUUID() : (Date.now()+Math.random()).toString(),
+    accountId, type:'entry', amount, held, impact, note,
+    date:operationDate('entryDate')
+  });
+
+  document.getElementById('entryAmount').value='';
+  document.getElementById('entryNote').value='';
+  save();
+}
+
+function addOutput(){
+  const accountId = document.getElementById('outputAccount').value;
+  const amount = Number(document.getElementById('outputAmount').value);
+  const note = document.getElementById('outputNote').value.trim();
+  const account = state.accounts.find(a=>a.id===accountId);
+  if(!account){ alert('Ajoute d’abord un compte.'); return; }
+  if(!(amount>0)){ alert('Entre un montant valide.'); return; }
+
+  const balance = getAccountBalance(accountId);
+  if(amount > balance){
+    if(!confirm(`Attention : cette sortie dépasse le solde disponible (${money(balance,account.currency)}). Continuer quand même ?`)){
+      return;
+    }
+  }
+
+  state.transactions.unshift({
+    id: crypto.randomUUID ? crypto.randomUUID() : (Date.now()+Math.random()).toString(),
+    accountId, type:'output', amount, held:0, impact:-amount, note,
+    date:operationDate('outputDate')
+  });
+
+  document.getElementById('outputAmount').value='';
+  document.getElementById('outputNote').value='';
+  save();
+}
+
+
+function addCommissionOutput(){
+  const accountId = document.getElementById('commissionAccount').value;
+  const amount = Number(document.getElementById('commissionAmount').value);
+  const note = document.getElementById('commissionNote').value.trim();
+  const account = state.accounts.find(a=>a.id===accountId);
+
+  if(!account){ alert('Ajoute d’abord un compte.'); return; }
+  if(!(amount>0)){ alert('Entre un montant valide.'); return; }
+
+  const available = getCommissionBalance(accountId);
+  if(amount > available){
+    alert(`La commission disponible est insuffisante. Solde commission : ${money(available,account.currency)}`);
+    return;
+  }
+
+  state.transactions.unshift({
+    id: crypto.randomUUID ? crypto.randomUUID() : (Date.now()+Math.random()).toString(),
+    accountId,
+    type:'commission_output',
+    amount,
+    held:0,
+    impact:0,
+    commissionImpact:-amount,
+    note,
+    date:operationDate('commissionDate')
+  });
+
+  document.getElementById('commissionAmount').value='';
+  document.getElementById('commissionNote').value='';
+  save();
+}
+
+function getCommissionBalance(accountId){
+  const generated = state.transactions
+    .filter(t=>t.accountId===accountId && t.type==='entry')
+    .reduce((sum,t)=>sum+(t.held||0),0);
+
+  const spent = state.transactions
+    .filter(t=>t.accountId===accountId && t.type==='commission_output')
+    .reduce((sum,t)=>sum+t.amount,0);
+
+  return generated-spent;
+}
+
+function getAccountBalance(accountId){
+  return state.transactions
+    .filter(t=>t.accountId===accountId)
+    .reduce((sum,t)=>sum+t.impact,0);
+}
+
+function toggleFee(id){
+  const a = state.accounts.find(x=>x.id===id);
+  if(a){ a.fee=!a.fee; save(); }
+}
+
+function deleteAccount(id){
+  if(state.transactions.some(t=>t.accountId===id)){
+    alert("Ce compte contient déjà des opérations. Il ne peut pas être supprimé.");
+    return;
+  }
+  state.accounts = state.accounts.filter(a=>a.id!==id);
+  save();
+}
+
+function resetAll(){
+  if(confirm('Voulez-vous vraiment effacer tous les comptes et toutes les opérations ?')){
+    state={accounts:[],transactions:[]};
+    save();
+  }
+}
+
+function setMode(mode){
+  const entry = mode==='entry';
+  const output = mode==='output';
+  const commission = mode==='commission';
+
+  document.getElementById('entryForm').style.display = entry ? 'block' : 'none';
+  document.getElementById('outputForm').style.display = output ? 'block' : 'none';
+  document.getElementById('commissionForm').style.display = commission ? 'block' : 'none';
+
+  document.getElementById('tabEntry').className = entry ? 'active' : 'ghost';
+  document.getElementById('tabOutput').className = output ? 'active' : 'ghost';
+  document.getElementById('tabCommission').className = commission ? 'active' : 'ghost';
+}
+
+function render(){
+  const options = state.accounts.length
+    ? state.accounts.map(a=>`<option value="${a.id}">${escapeHtml(a.name)} — ${a.fee?'3 %':'sans retenue'}</option>`).join('')
+    : '<option value="">Aucun compte</option>';
+
+  document.getElementById('entryAccount').innerHTML = options;
+  document.getElementById('outputAccount').innerHTML = options;
+  document.getElementById('commissionAccount').innerHTML = options;
+
+  const ac=document.getElementById('accounts');
+  if(!state.accounts.length){
+    ac.innerHTML='<div class="empty">Aucun compte pour le moment.</div>';
+  }else{
+    ac.innerHTML=state.accounts.map(a=>{
+      const ts=state.transactions.filter(t=>t.accountId===a.id);
+      const entries=ts.filter(t=>t.type==='entry').reduce((s,t)=>s+t.amount,0);
+      const held=ts.filter(t=>t.type==='entry').reduce((s,t)=>s+t.held,0);
+      const outputs=ts.filter(t=>t.type==='output').reduce((s,t)=>s+t.amount,0);
+      const balance=ts.reduce((s,t)=>s+(t.impact||0),0);
+      const commissionOutputs=ts.filter(t=>t.type==='commission_output').reduce((s,t)=>s+t.amount,0);
+      const commissionBalance=held-commissionOutputs;
+
+      return `<div class="account">
+        <div class="account-top">
+          <div>
+            <div class="account-name">${escapeHtml(a.name)}</div>
+            <div style="color:var(--muted);font-size:13px;margin-top:3px">${a.currency}</div>
+          </div>
+          <span class="badge ${a.fee?'':'off'}">${a.fee?'Retenue 3 %':'Sans retenue'}</span>
+        </div>
+
+        <div class="account-values">
+          <div class="mini"><div class="k">Entrées</div><div class="v">${money(entries,a.currency)}</div></div>
+          <div class="mini"><div class="k">Commission générée</div><div class="v">${money(held,a.currency)}</div></div>
+          <div class="mini"><div class="k">Sorties principales</div><div class="v">${money(outputs,a.currency)}</div></div>
+          <div class="mini"><div class="k">Solde principal</div><div class="v">${money(balance,a.currency)}</div></div>
+          <div class="mini"><div class="k">Sorties commission</div><div class="v">${money(commissionOutputs,a.currency)}</div></div>
+          <div class="mini"><div class="k">Commission disponible</div><div class="v">${money(commissionBalance,a.currency)}</div></div>
+        </div>
+
+        <div class="row" style="margin-top:12px">
+          <button class="ghost" onclick="toggleFee('${a.id}')">${a.fee?'Désactiver 3 %':'Activer 3 %'}</button>
+          <button class="danger" onclick="deleteAccount('${a.id}')">Supprimer</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  const tbody=document.getElementById('history');
+  if(!state.transactions.length){
+    tbody.innerHTML='<tr><td colspan="7" class="empty">Aucune opération enregistrée.</td></tr>';
+  }else{
+    tbody.innerHTML=state.transactions.map(t=>{
+      const a=state.accounts.find(x=>x.id===t.accountId);
+      if(!a) return '';
+      const d=new Date(t.date).toLocaleString('fr-FR');
+      const isEntry=t.type==='entry';
+      const isCommission=t.type==='commission_output';
+      const typeLabel = isEntry ? 'Entrée' : (isCommission ? 'Sortie commission' : 'Sortie');
+      const impact = t.impact || 0;
+      return `<tr>
+        <td>${d}</td>
+        <td class="${isEntry?'pos':'neg'}">${typeLabel}</td>
+        <td>${escapeHtml(a.name)}</td>
+        <td class="${isEntry?'pos':'neg'}">${money(t.amount,a.currency)}</td>
+        <td class="ret">${t.held ? money(t.held,a.currency) : '—'}</td>
+        <td class="${impact>=0?'pos':'neg'}">${isCommission ? '—' : ((impact>=0?'+':'')+money(impact,a.currency))}</td>
+        <td>${escapeHtml(t.note||'—')}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  const totalE=state.transactions.filter(t=>t.type==='entry').reduce((s,t)=>s+t.amount,0);
+  const totalH=state.transactions.filter(t=>t.type==='entry').reduce((s,t)=>s+(t.held||0),0);
+  const totalO=state.transactions.filter(t=>t.type==='output').reduce((s,t)=>s+t.amount,0);
+  const totalB=state.transactions.reduce((s,t)=>s+(t.impact||0),0);
+  const totalCO=state.transactions.filter(t=>t.type==='commission_output').reduce((s,t)=>s+t.amount,0);
+  const totalCB=totalH-totalCO;
+
+  document.getElementById('totalEntries').textContent=formatCompact(totalE);
+  document.getElementById('totalHeld').textContent=formatCompact(totalH);
+  document.getElementById('totalOutputs').textContent=formatCompact(totalO);
+  document.getElementById('totalBalance').textContent=formatCompact(totalB);
+  document.getElementById('totalCommissionOutputs').textContent=formatCompact(totalCO);
+  document.getElementById('totalCommissionBalance').textContent=formatCompact(totalCB);
+}
+
+function formatCompact(n){
+  return new Intl.NumberFormat('fr-FR',{maximumFractionDigits:2}).format(n);
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g,m=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'
+  }[m]));
+}
+
+
+function reportDate(d){
+  return new Date(d).toLocaleDateString('fr-FR',{
+    weekday:'long', year:'numeric', month:'long', day:'numeric'
+  });
+}
+
+function showReport(){
+  const area = document.getElementById('reportArea');
+  area.style.display = 'block';
+
+  const now = new Date();
+  const generated = now.toLocaleString('fr-FR');
+  let html = `<div class="report">
+    <div class="report-header">
+      <div>
+        <div class="report-title">Rapport de gestion de fonds</div>
+        <div style="margin-top:5px">Situation des comptes et historique des opérations</div>
+      </div>
+      <div class="report-meta">Généré le ${generated}</div>
+    </div>`;
+
+  state.accounts.forEach(a=>{
+    const ts = state.transactions
+      .filter(t=>t.accountId===a.id)
+      .slice()
+      .sort((x,y)=>new Date(x.date)-new Date(y.date));
+
+    const entries = ts.filter(t=>t.type==='entry').reduce((s,t)=>s+t.amount,0);
+    const commission = ts.filter(t=>t.type==='entry').reduce((s,t)=>s+(t.held||0),0);
+    const outputs = ts.filter(t=>t.type==='output').reduce((s,t)=>s+t.amount,0);
+    const commissionOutputs = ts.filter(t=>t.type==='commission_output').reduce((s,t)=>s+t.amount,0);
+    const principal = ts.reduce((s,t)=>s+(t.impact||0),0);
+    const commissionBalance = commission-commissionOutputs;
+    const totalHeld = principal+commissionBalance;
+
+    html += `
+      <h3>${escapeHtml(a.name)} — ${a.currency}</h3>
+      <div class="report-summary">
+        <div class="report-box"><div class="k">Total entrées</div><div class="v">${money(entries,a.currency)}</div></div>
+        <div class="report-box"><div class="k">Commission générée</div><div class="v">${money(commission,a.currency)}</div></div>
+        <div class="report-box"><div class="k">Sorties principales</div><div class="v">${money(outputs,a.currency)}</div></div>
+        <div class="report-box"><div class="k">Solde principal</div><div class="v">${money(principal,a.currency)}</div></div>
+        <div class="report-box"><div class="k">Sorties commission</div><div class="v">${money(commissionOutputs,a.currency)}</div></div>
+        <div class="report-box"><div class="k">Commission disponible</div><div class="v">${money(commissionBalance,a.currency)}</div></div>
+        <div class="report-box"><div class="k">Total détenu</div><div class="v">${money(totalHeld,a.currency)}</div></div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th><th>Type</th><th>Montant</th><th>Commission</th>
+            <th>Impact principal</th><th>Motif / Référence</th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+    if(!ts.length){
+      html += `<tr><td colspan="6">Aucune opération.</td></tr>`;
+    } else {
+      ts.forEach(t=>{
+        const typeLabel = t.type==='entry' ? 'Entrée' :
+                          t.type==='commission_output' ? 'Sortie commission' : 'Sortie';
+        const impact = t.impact || 0;
+        html += `<tr>
+          <td>${reportDate(t.date)}</td>
+          <td>${typeLabel}</td>
+          <td>${money(t.amount,a.currency)}</td>
+          <td>${t.held ? money(t.held,a.currency) : '—'}</td>
+          <td>${t.type==='commission_output' ? '—' : ((impact>=0?'+':'')+money(impact,a.currency))}</td>
+          <td>${escapeHtml(t.note||'—')}</td>
+        </tr>`;
+      });
+    }
+
+    html += `</tbody></table>`;
+  });
+
+  html += `
+    <div class="signature-row">
+      <div class="signature">Gestionnaire</div>
+      <div class="signature">Validation / Signature</div>
+    </div>
+  </div>`;
+
+  area.innerHTML = html;
+  area.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function buildReportStandalone(){
+  showReport();
+  const report = document.getElementById('reportArea').innerHTML;
+  return `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Rapport Gestion de Fonds</title>
+<style>
+body{font-family:Arial,sans-serif;color:#17221c;margin:0;background:#fff}
+.report{padding:24px;max-width:1000px;margin:auto}
+.report-header{display:flex;justify-content:space-between;gap:20px;border-bottom:2px solid #dfe7e2;padding-bottom:14px;margin-bottom:16px}
+.report-title{font-size:24px;font-weight:800}.report-meta{font-size:12px;color:#66756e;text-align:right}
+.report-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:16px 0}
+.report-box{border:1px solid #dce6e0;border-radius:10px;padding:12px}.report-box .k{font-size:11px;color:#66756e}.report-box .v{font-size:17px;font-weight:800;margin-top:4px}
+table{width:100%;border-collapse:collapse;margin-bottom:20px}th,td{padding:8px;border-bottom:1px solid #e7ece9;text-align:left;font-size:12px}th{font-size:11px;color:#66756e}
+.signature-row{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:45px}.signature{border-top:1px solid #333;padding-top:6px;text-align:center;font-size:12px}
+@media(max-width:700px){.report-summary{grid-template-columns:1fr 1fr}.report-header{display:block}.report-meta{text-align:left;margin-top:8px}}
+@media print{@page{size:A4;margin:10mm}.report{padding:0}body{margin:0}}
+</style>
+</head><body>${report}</body></html>`;
+}
+
+function downloadBlob(content, filename, mime){
+  const blob = new Blob([content], {type:mime});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 1000);
+}
+
+function exportReportHTML(){
+  const content = buildReportStandalone();
+  const stamp = new Date().toISOString().slice(0,10);
+  downloadBlob(content, `rapport_gestion_fonds_${stamp}.html`, 'text/html;charset=utf-8');
+}
+
+function exportReportCSV(){
+  const rows = [['Date','Compte','Type','Montant','Devise','Commission générée','Impact principal','Motif / Référence']];
+  state.accounts.forEach(a=>{
+    state.transactions
+      .filter(t=>t.accountId===a.id)
+      .slice().sort((x,y)=>new Date(x.date)-new Date(y.date))
+      .forEach(t=>{
+        const typeLabel = t.type==='entry' ? 'Entrée' : (t.type==='commission_output' ? 'Sortie commission' : 'Sortie');
+        rows.push([
+          new Date(t.date).toLocaleDateString('fr-FR'),
+          a.name,
+          typeLabel,
+          String(t.amount).replace('.',','),
+          a.currency,
+          t.held ? String(t.held).replace('.',',') : '',
+          t.type==='commission_output' ? '' : String(t.impact||0).replace('.',','),
+          t.note||''
+        ]);
+      });
+  });
+  const csv = '\ufeff' + rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(';')).join('\r\n');
+  const stamp = new Date().toISOString().slice(0,10);
+  downloadBlob(csv, `operations_gestion_fonds_${stamp}.csv`, 'text/csv;charset=utf-8');
+}
+
+function printReport(){
+  const content = buildReportStandalone();
+  const w = window.open('', '_blank');
+  if(!w){
+    alert("Le navigateur a bloqué l'ouverture de la fenêtre d'impression. Autorisez les fenêtres pop-up pour ce fichier, ou utilisez 'Exporter le rapport'.");
+    return;
+  }
+  w.document.open();
+  w.document.write(content);
+  w.document.close();
+  w.focus();
+  setTimeout(()=>{ w.print(); }, 300);
+}
+
+setDefaultDates();
+render();
+</script>
+</body>
+</html>
