@@ -94,6 +94,13 @@
   .filter-field{display:flex;flex-direction:column;gap:5px}
   .filter-field label{font-size:12px;color:var(--muted);font-weight:700}
   .filter-status{font-size:13px;color:var(--primary2);font-weight:700;margin-top:8px}
+  .loan-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}
+  .loan-card{border:1px solid var(--border);border-radius:14px;padding:14px;background:#fff;margin-top:10px}
+  .loan-card.overdue{border-color:#e5a7a1;background:#fffafa}
+  .loan-card.paid{border-color:#a9d9be;background:#fbfffc}
+  .loan-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+  .loan-progress{height:8px;background:#e8eeea;border-radius:99px;overflow:hidden;margin-top:10px}
+  .loan-progress span{display:block;height:100%;background:var(--primary);border-radius:99px}
   @media(max-width:760px){
     .grid{grid-template-columns:1fr 1fr}
     .accounts{grid-template-columns:1fr}
@@ -101,10 +108,12 @@
     .wrap{padding:14px}
     table{display:block;overflow:auto;white-space:nowrap}
     .filters{grid-template-columns:1fr 1fr}
+    .loan-stats{grid-template-columns:1fr 1fr}
   }
   @media(max-width:480px){
     .grid{grid-template-columns:1fr}
     .filters{grid-template-columns:1fr}
+    .loan-stats{grid-template-columns:1fr}
   }
 
   .report{
@@ -275,6 +284,54 @@
     <div id="accounts" class="accounts"></div>
   </div>
 
+  <div class="card" id="loansModule">
+    <div class="row" style="justify-content:space-between;align-items:center">
+      <div>
+        <h2 style="margin:0 0 4px">Emprunts</h2>
+        <div class="footer-note">Enregistrez les personnes qui vous empruntent, les intérêts, les échéances et les remboursements.</div>
+      </div>
+      <div class="row">
+        <button class="ghost" onclick="showLoanReport()">Rapport des emprunts</button>
+        <button class="ghost" onclick="exportLoansCSV()">Exporter CSV</button>
+        <button class="primary" onclick="printLoanReport()">Imprimer / PDF</button>
+      </div>
+    </div>
+
+    <div class="loan-stats">
+      <div class="mini"><div class="k">Montant prêté</div><div class="v" id="loanPrincipalTotal">0</div></div>
+      <div class="mini"><div class="k">Intérêts prévus</div><div class="v" id="loanInterestTotal">0</div></div>
+      <div class="mini"><div class="k">Remboursé</div><div class="v" id="loanPaidTotal">0</div></div>
+      <div class="mini"><div class="k">Reste à recevoir</div><div class="v" id="loanDueTotal">0</div></div>
+    </div>
+
+    <h2>Nouvel emprunt</h2>
+    <div class="row">
+      <input id="borrowerName" placeholder="Nom de l’emprunteur" style="flex:2;min-width:210px">
+      <input id="borrowerPhone" type="tel" placeholder="Téléphone" style="flex:1;min-width:150px">
+      <input id="loanAmount" type="number" min="0" step="0.01" placeholder="Montant prêté" style="flex:1;min-width:150px">
+      <select id="loanCurrency" style="min-width:100px"><option>USD</option><option>CDF</option><option>EUR</option><option>ZAR</option></select>
+      <input id="loanRate" type="number" min="0" step="0.01" value="0" placeholder="Intérêt %" style="width:115px">
+      <input id="loanDate" type="date" title="Date du prêt">
+      <input id="loanDueDate" type="date" title="Échéance">
+      <input id="loanNote" placeholder="Motif / garantie / note" style="flex:2;min-width:220px">
+      <button class="primary" onclick="addLoan()">Créer l’emprunt</button>
+    </div>
+    <div class="footer-note">L’intérêt est calculé une fois sur le montant prêté. Saisissez 0 % pour un prêt sans intérêt.</div>
+
+    <h2 style="margin-top:22px">Enregistrer un remboursement</h2>
+    <div class="row">
+      <select id="repaymentLoan" style="flex:2;min-width:230px"></select>
+      <input id="repaymentAmount" type="number" min="0" step="0.01" placeholder="Montant remboursé" style="flex:1;min-width:160px">
+      <input id="repaymentDate" type="date">
+      <input id="repaymentNote" placeholder="Référence / note" style="flex:2;min-width:220px">
+      <button class="primary" onclick="addRepayment()">Enregistrer</button>
+    </div>
+
+    <h2 style="margin-top:22px">Dossiers des emprunteurs</h2>
+    <div id="loansList"></div>
+    <div id="loanReportArea" style="display:none;margin-top:16px"></div>
+  </div>
+
   <div class="card">
     <div class="row" style="justify-content:space-between;align-items:center">
       <h2 style="margin:0">Historique des opérations</h2>
@@ -327,6 +384,8 @@ if(!state){
   state = {accounts: [], transactions: []};
   localStorage.setItem('gestionFondsV5', JSON.stringify(state));
 }
+if(!Array.isArray(state.loans)) state.loans=[];
+if(!Array.isArray(state.repayments)) state.repayments=[];
 
 function save(){
   localStorage.setItem('gestionFondsV5', JSON.stringify(state));
@@ -361,10 +420,78 @@ function setDefaultDates(){
   const mm = String(today.getMonth()+1).padStart(2,'0');
   const dd = String(today.getDate()).padStart(2,'0');
   const v = `${yyyy}-${mm}-${dd}`;
-  ['entryDate','outputDate','commissionDate'].forEach(id=>{
+  ['entryDate','outputDate','commissionDate','loanDate','repaymentDate'].forEach(id=>{
     const el=document.getElementById(id);
     if(el && !el.value) el.value=v;
   });
+}
+
+function newId(){
+  return crypto.randomUUID ? crypto.randomUUID() : (Date.now()+Math.random()).toString();
+}
+
+function addLoan(){
+  const borrower=document.getElementById('borrowerName').value.trim();
+  const phone=document.getElementById('borrowerPhone').value.trim();
+  const principal=Number(document.getElementById('loanAmount').value);
+  const currency=document.getElementById('loanCurrency').value;
+  const interestRate=Number(document.getElementById('loanRate').value);
+  const loanDate=document.getElementById('loanDate').value;
+  const dueDate=document.getElementById('loanDueDate').value;
+  const note=document.getElementById('loanNote').value.trim();
+  if(!borrower){alert('Entre le nom de l’emprunteur.');return;}
+  if(!(principal>0)){alert('Entre un montant prêté valide.');return;}
+  if(!(interestRate>=0)){alert('Entre un taux d’intérêt valide.');return;}
+  if(!loanDate || !dueDate){alert('Entre la date du prêt et la date d’échéance.');return;}
+  if(dueDate<loanDate){alert('L’échéance ne peut pas précéder la date du prêt.');return;}
+  state.loans.unshift({id:newId(),borrower,phone,principal,currency,interestRate,loanDate,dueDate,note,createdAt:new Date().toISOString()});
+  ['borrowerName','borrowerPhone','loanAmount','loanNote'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('loanRate').value='0';
+  document.getElementById('loanDueDate').value='';
+  save();
+}
+
+function loanInterest(loan){return Number((Number(loan.principal)*Number(loan.interestRate||0)/100).toFixed(2));}
+function loanTotal(loan){return Number(loan.principal)+loanInterest(loan);}
+function loanPaid(id){return state.repayments.filter(r=>r.loanId===id).reduce((s,r)=>s+Number(r.amount||0),0);}
+function loanRemaining(loan){return Math.max(0,Number((loanTotal(loan)-loanPaid(loan.id)).toFixed(2)));}
+function loanStatus(loan){if(loanRemaining(loan)<=0)return 'paid';return loan.dueDate<new Date().toISOString().slice(0,10)?'overdue':'active';}
+
+function addRepayment(){
+  const loanId=document.getElementById('repaymentLoan').value;
+  const amount=Number(document.getElementById('repaymentAmount').value);
+  const date=document.getElementById('repaymentDate').value;
+  const note=document.getElementById('repaymentNote').value.trim();
+  const loan=state.loans.find(l=>l.id===loanId);
+  if(!loan){alert('Crée d’abord un emprunt actif.');return;}
+  if(!(amount>0)){alert('Entre un montant de remboursement valide.');return;}
+  if(!date){alert('Entre la date du remboursement.');return;}
+  const remaining=loanRemaining(loan);
+  if(amount>remaining && !confirm(`Ce paiement dépasse le reste à recevoir (${money(remaining,loan.currency)}). Continuer ?`))return;
+  state.repayments.unshift({id:newId(),loanId,amount,date,note,createdAt:new Date().toISOString()});
+  document.getElementById('repaymentAmount').value='';
+  document.getElementById('repaymentNote').value='';
+  save();
+}
+
+function editLoan(id){
+  const l=state.loans.find(x=>x.id===id); if(!l)return;
+  const borrower=prompt('Nom de l’emprunteur :',l.borrower); if(borrower===null)return;
+  const phone=prompt('Téléphone :',l.phone||''); if(phone===null)return;
+  const dueDate=prompt('Échéance (AAAA-MM-JJ) :',l.dueDate); if(dueDate===null)return;
+  const rate=prompt('Taux d’intérêt en % :',l.interestRate||0); if(rate===null)return;
+  const parsedRate=Number(String(rate).replace(',','.'));
+  if(!borrower.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(dueDate) || !(parsedRate>=0)){alert('Informations invalides.');return;}
+  l.borrower=borrower.trim();l.phone=phone.trim();l.dueDate=dueDate;l.interestRate=parsedRate;save();
+}
+
+function deleteLoan(id){
+  if(state.repayments.some(r=>r.loanId===id)){alert('Cet emprunt contient des remboursements et ne peut pas être supprimé.');return;}
+  if(confirm('Supprimer cet emprunt ?')){state.loans=state.loans.filter(l=>l.id!==id);save();}
+}
+
+function deleteRepayment(id){
+  if(confirm('Supprimer ce remboursement ?')){state.repayments=state.repayments.filter(r=>r.id!==id);save();}
 }
 
 function addAccount(){
@@ -606,8 +733,8 @@ function deleteAccount(id){
 }
 
 function resetAll(){
-  if(confirm('Voulez-vous vraiment effacer tous les comptes et toutes les opérations ?')){
-    state={accounts:[],transactions:[]};
+  if(confirm('Voulez-vous vraiment effacer tous les comptes, toutes les opérations et tous les emprunts ?')){
+    state={accounts:[],transactions:[],loans:[],repayments:[]};
     activeAccountId='';
     localStorage.removeItem('gestionFondsActiveAccount');
     save();
@@ -719,7 +846,51 @@ function render(){
   document.getElementById('totalBalance').textContent=formatCompact(totalB);
   document.getElementById('totalCommissionOutputs').textContent=formatCompact(totalCO);
   document.getElementById('totalCommissionBalance').textContent=formatCompact(totalCB);
+  renderLoans();
 }
+
+function groupedLoanValue(valueFn){
+  const totals={};
+  state.loans.forEach(l=>totals[l.currency]=(totals[l.currency]||0)+valueFn(l));
+  const parts=Object.entries(totals).map(([currency,value])=>money(value,currency));
+  return parts.length?parts.join(' • '):'0';
+}
+
+function renderLoans(){
+  const active=state.loans.filter(l=>loanRemaining(l)>0);
+  const select=document.getElementById('repaymentLoan');
+  select.innerHTML=active.length?active.map(l=>`<option value="${l.id}">${escapeHtml(l.borrower)} — reste ${money(loanRemaining(l),l.currency)}</option>`).join(''):'<option value="">Aucun emprunt actif</option>';
+  document.getElementById('loanPrincipalTotal').textContent=groupedLoanValue(l=>Number(l.principal));
+  document.getElementById('loanInterestTotal').textContent=groupedLoanValue(l=>loanInterest(l));
+  document.getElementById('loanPaidTotal').textContent=groupedLoanValue(l=>loanPaid(l.id));
+  document.getElementById('loanDueTotal').textContent=groupedLoanValue(l=>loanRemaining(l));
+  const list=document.getElementById('loansList');
+  if(!state.loans.length){list.innerHTML='<div class="empty">Aucun emprunt enregistré.</div>';return;}
+  list.innerHTML=state.loans.map(l=>{
+    const paid=loanPaid(l.id),total=loanTotal(l),remaining=loanRemaining(l),status=loanStatus(l);
+    const percent=Math.min(100,total?paid/total*100:0);
+    const statusText=status==='paid'?'Remboursé':status==='overdue'?'En retard':'En cours';
+    const repayments=state.repayments.filter(r=>r.loanId===l.id).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+    return `<div class="loan-card ${status}">
+      <div class="loan-head"><div><div class="account-name">${escapeHtml(l.borrower)}</div><div class="footer-note">${escapeHtml(l.phone||'Téléphone non renseigné')} • Prêt du ${new Date(l.loanDate+'T12:00:00').toLocaleDateString('fr-FR')} • Échéance ${new Date(l.dueDate+'T12:00:00').toLocaleDateString('fr-FR')}</div></div><span class="badge ${status==='paid'?'':'off'}">${statusText}</span></div>
+      <div class="account-values"><div class="mini"><div class="k">Capital</div><div class="v">${money(l.principal,l.currency)}</div></div><div class="mini"><div class="k">Intérêt (${Number(l.interestRate||0)} %)</div><div class="v">${money(loanInterest(l),l.currency)}</div></div><div class="mini"><div class="k">Remboursé</div><div class="v">${money(paid,l.currency)}</div></div><div class="mini"><div class="k">Reste</div><div class="v">${money(remaining,l.currency)}</div></div></div>
+      <div class="loan-progress"><span style="width:${percent}%"></span></div>
+      ${l.note?`<div class="footer-note" style="margin-top:8px">${escapeHtml(l.note)}</div>`:''}
+      <div class="row" style="margin-top:10px"><button class="ghost" onclick="editLoan('${l.id}')">Modifier</button><button class="danger" onclick="deleteLoan('${l.id}')">Supprimer</button></div>
+      ${repayments.length?`<div style="overflow:auto;margin-top:10px"><table><thead><tr><th>Date</th><th>Remboursement</th><th>Référence</th><th></th></tr></thead><tbody>${repayments.map(r=>`<tr><td>${new Date(r.date+'T12:00:00').toLocaleDateString('fr-FR')}</td><td class="pos">${money(r.amount,l.currency)}</td><td>${escapeHtml(r.note||'—')}</td><td><button class="danger" onclick="deleteRepayment('${r.id}')">Supprimer</button></td></tr>`).join('')}</tbody></table></div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function buildLoanReport(){
+  const rows=state.loans.map(l=>{const paid=loanPaid(l.id),remaining=loanRemaining(l);return `<tr><td>${escapeHtml(l.borrower)}</td><td>${escapeHtml(l.phone||'—')}</td><td>${new Date(l.loanDate+'T12:00:00').toLocaleDateString('fr-FR')}</td><td>${new Date(l.dueDate+'T12:00:00').toLocaleDateString('fr-FR')}</td><td>${money(l.principal,l.currency)}</td><td>${Number(l.interestRate||0)} %</td><td>${money(loanTotal(l),l.currency)}</td><td>${money(paid,l.currency)}</td><td>${money(remaining,l.currency)}</td><td>${loanStatus(l)==='paid'?'Remboursé':loanStatus(l)==='overdue'?'En retard':'En cours'}</td></tr>`;}).join('');
+  return `<div class="report"><div class="report-header"><div><div class="report-title">Rapport des emprunts</div><div style="margin-top:5px">Situation des emprunteurs et des remboursements</div></div><div class="report-meta">Généré le ${new Date().toLocaleString('fr-FR')}<br>${state.loans.length} emprunt(s)</div></div><div class="report-summary"><div class="report-box"><div class="k">Capital prêté</div><div class="v">${groupedLoanValue(l=>Number(l.principal))}</div></div><div class="report-box"><div class="k">Remboursé</div><div class="v">${groupedLoanValue(l=>loanPaid(l.id))}</div></div><div class="report-box"><div class="k">Reste à recevoir</div><div class="v">${groupedLoanValue(l=>loanRemaining(l))}</div></div></div><table><thead><tr><th>Emprunteur</th><th>Téléphone</th><th>Prêt</th><th>Échéance</th><th>Capital</th><th>Intérêt</th><th>Total dû</th><th>Remboursé</th><th>Reste</th><th>Statut</th></tr></thead><tbody>${rows||'<tr><td colspan="10">Aucun emprunt.</td></tr>'}</tbody></table><div class="signature-row"><div class="signature">Gestionnaire</div><div class="signature">Validation / Signature</div></div></div>`;
+}
+
+function showLoanReport(){const area=document.getElementById('loanReportArea');area.innerHTML=buildLoanReport();area.style.display='block';area.scrollIntoView({behavior:'smooth',block:'start'});}
+function loanReportDocument(){return `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rapport des emprunts</title><style>body{font-family:Arial,sans-serif;color:#17221c}.report{padding:24px}.report-header{display:flex;justify-content:space-between;border-bottom:2px solid #dfe7e2;padding-bottom:14px}.report-title{font-size:24px;font-weight:800}.report-meta{font-size:12px;text-align:right}.report-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:16px 0}.report-box{border:1px solid #ddd;padding:10px}.k{font-size:11px;color:#66756e}.v{font-weight:800}table{width:100%;border-collapse:collapse}th,td{padding:7px;border-bottom:1px solid #ddd;text-align:left;font-size:11px}.signature-row{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:45px}.signature{border-top:1px solid #333;text-align:center;padding-top:6px}@media print{@page{size:A4 landscape;margin:8mm}.report{padding:0}}</style></head><body>${buildLoanReport()}</body></html>`;}
+function printLoanReport(){const w=window.open('','_blank');if(!w){alert('Autorisez les fenêtres pop-up pour imprimer.');return;}w.document.write(loanReportDocument());w.document.close();setTimeout(()=>w.print(),300);}
+function exportLoansCSV(){const rows=[['Emprunteur','Téléphone','Date du prêt','Échéance','Capital','Devise','Intérêt %','Intérêt','Total dû','Remboursé','Reste','Statut','Note']];state.loans.forEach(l=>rows.push([l.borrower,l.phone||'',l.loanDate,l.dueDate,l.principal,l.currency,l.interestRate||0,loanInterest(l),loanTotal(l),loanPaid(l.id),loanRemaining(l),loanStatus(l)==='paid'?'Remboursé':loanStatus(l)==='overdue'?'En retard':'En cours',l.note||'']));const csv='\ufeff'+rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(';')).join('\r\n');downloadBlob(csv,`emprunts_${new Date().toISOString().slice(0,10)}.csv`,'text/csv;charset=utf-8');}
 
 function formatCompact(n){
   return new Intl.NumberFormat('fr-FR',{maximumFractionDigits:2}).format(n);
