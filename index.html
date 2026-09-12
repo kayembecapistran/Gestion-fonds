@@ -90,15 +90,21 @@
   .footer-note{font-size:12px;color:var(--muted);margin-top:8px}
   .tabs{display:flex;gap:8px;margin-bottom:14px}
   .tabs button.active{background:var(--primary);color:white}
+  .filters{display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:10px;margin:14px 0}
+  .filter-field{display:flex;flex-direction:column;gap:5px}
+  .filter-field label{font-size:12px;color:var(--muted);font-weight:700}
+  .filter-status{font-size:13px;color:var(--primary2);font-weight:700;margin-top:8px}
   @media(max-width:760px){
     .grid{grid-template-columns:1fr 1fr}
     .accounts{grid-template-columns:1fr}
     h1{font-size:25px}
     .wrap{padding:14px}
     table{display:block;overflow:auto;white-space:nowrap}
+    .filters{grid-template-columns:1fr 1fr}
   }
   @media(max-width:480px){
     .grid{grid-template-columns:1fr}
+    .filters{grid-template-columns:1fr}
   }
 
   .report{
@@ -274,6 +280,34 @@
       <h2 style="margin:0">Historique des opérations</h2>
       <button class="danger" onclick="resetAll()">Effacer toutes les données</button>
     </div>
+    <div class="filters">
+      <div class="filter-field">
+        <label for="filterStartDate">Du</label>
+        <input id="filterStartDate" type="date" onchange="applyHistoryFilters()">
+      </div>
+      <div class="filter-field">
+        <label for="filterEndDate">Au</label>
+        <input id="filterEndDate" type="date" onchange="applyHistoryFilters()">
+      </div>
+      <div class="filter-field">
+        <label for="filterType">Type d'opération</label>
+        <select id="filterType" onchange="applyHistoryFilters()">
+          <option value="">Tous les types</option>
+          <option value="entry">Entrées</option>
+          <option value="output">Sorties principales</option>
+          <option value="commission_output">Sorties commission</option>
+        </select>
+      </div>
+      <div class="filter-field">
+        <label for="filterSearch">Motif / référence</label>
+        <input id="filterSearch" type="search" placeholder="Rechercher..." oninput="applyHistoryFilters()">
+      </div>
+    </div>
+    <div class="row" style="align-items:center">
+      <button class="ghost" onclick="resetHistoryFilters()">Réinitialiser les filtres</button>
+      <button class="primary" onclick="showReport('full')">Réaliser le rapport filtré</button>
+    </div>
+    <div id="filterStatus" class="filter-status"></div>
     <div style="overflow:auto;margin-top:10px">
       <table>
         <thead>
@@ -510,6 +544,58 @@ function scopedTransactions(){
   return activeAccountId ? state.transactions.filter(t=>t.accountId===activeAccountId) : state.transactions;
 }
 
+function currentFilters(){
+  return {
+    start: document.getElementById('filterStartDate')?.value || '',
+    end: document.getElementById('filterEndDate')?.value || '',
+    type: document.getElementById('filterType')?.value || '',
+    search: (document.getElementById('filterSearch')?.value || '').trim().toLocaleLowerCase('fr')
+  };
+}
+
+function filteredTransactions(){
+  const filters=currentFilters();
+  return scopedTransactions().filter(t=>{
+    const date=String(t.date||'').slice(0,10);
+    if(filters.start && date < filters.start) return false;
+    if(filters.end && date > filters.end) return false;
+    if(filters.type && t.type !== filters.type) return false;
+    if(filters.search){
+      const account=state.accounts.find(a=>a.id===t.accountId);
+      const searchable=`${t.note||''} ${account?.name||''}`.toLocaleLowerCase('fr');
+      if(!searchable.includes(filters.search)) return false;
+    }
+    return true;
+  });
+}
+
+function applyHistoryFilters(){
+  document.getElementById('reportArea').style.display='none';
+  render();
+}
+
+function resetHistoryFilters(){
+  ['filterStartDate','filterEndDate','filterSearch'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('filterType').value='';
+  applyHistoryFilters();
+}
+
+function filterDescription(){
+  const f=currentFilters();
+  const parts=[];
+  if(activeAccountId){
+    const account=state.accounts.find(a=>a.id===activeAccountId);
+    if(account) parts.push(`Compte : ${account.name}`);
+  }
+  if(f.start) parts.push(`Du ${new Date(f.start+'T12:00:00').toLocaleDateString('fr-FR')}`);
+  if(f.end) parts.push(`Au ${new Date(f.end+'T12:00:00').toLocaleDateString('fr-FR')}`);
+  if(f.type){
+    parts.push(`Type : ${{entry:'Entrées',output:'Sorties principales',commission_output:'Sorties commission'}[f.type]}`);
+  }
+  if(f.search) parts.push(`Recherche : ${f.search}`);
+  return parts.length ? parts.join(' • ') : 'Aucun filtre — toutes les opérations';
+}
+
 function deleteAccount(id){
   if(state.transactions.some(t=>t.accountId===id)){
     alert("Ce compte contient déjà des opérations. Il ne peut pas être supprimé.");
@@ -595,7 +681,8 @@ function render(){
   }
 
   const tbody=document.getElementById('history');
-  const visibleTransactions=scopedTransactions();
+  const visibleTransactions=filteredTransactions();
+  document.getElementById('filterStatus').textContent=`${visibleTransactions.length} opération(s) affichée(s) • ${filterDescription()}`;
   if(!visibleTransactions.length){
     tbody.innerHTML='<tr><td colspan="7" class="empty">Aucune opération enregistrée.</td></tr>';
   }else{
@@ -662,17 +749,18 @@ function showReport(mode='full'){
 
   const now = new Date();
   const generated = now.toLocaleString('fr-FR');
+  const reportTransactions=filteredTransactions();
   let html = `<div class="report">
     <div class="report-header">
       <div>
         <div class="report-title">${mode==='commission' ? 'Rapport des commissions' : 'Rapport de gestion de fonds'}</div>
         <div style="margin-top:5px">${mode==='commission' ? 'Commissions générées, utilisées et disponibles' : 'Situation des comptes et historique des opérations'}</div>
       </div>
-      <div class="report-meta">Généré le ${generated}</div>
+      <div class="report-meta">Généré le ${generated}<br>${escapeHtml(filterDescription())}<br>${reportTransactions.length} opération(s)</div>
     </div>`;
 
   scopedAccounts().forEach(a=>{
-    const ts = state.transactions
+    const ts = reportTransactions
       .filter(t=>t.accountId===a.id)
       .slice()
       .sort((x,y)=>new Date(x.date)-new Date(y.date));
@@ -813,7 +901,7 @@ function exportReportCSV(){
     ? ['Date','Compte','Type','Montant de référence','Devise','Impact commission','Motif / Référence']
     : ['Date','Compte','Type','Montant','Devise','Commission générée','Impact principal','Motif / Référence']];
   scopedAccounts().forEach(a=>{
-    state.transactions
+    filteredTransactions()
       .filter(t=>t.accountId===a.id && (!commissionOnly || (t.type==='entry' && (t.held||0)>0) || t.type==='commission_output'))
       .slice().sort((x,y)=>new Date(x.date)-new Date(y.date))
       .forEach(t=>{
